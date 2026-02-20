@@ -1,0 +1,723 @@
+🥊 FITNESS TRACKER — FULL BUILD PACK (ULTRA-DETAILED TXT)
+0. PURPOSE
+
+A self-hosted, small-group training tracker for 1–10 users.
+
+Primary goals:
+
+Fast
+
+Reliable
+
+Mobile + desktop friendly
+
+Clean dark UI
+
+Highly expandable
+
+Low maintenance
+
+Secure enough for personal health data
+
+No external dependencies required
+
+1. CORE FEATURES (MVP)
+User Management
+
+Open signup
+
+Login/logout
+
+Password hashing
+
+Session-based authentication
+
+Private accounts
+
+No public profiles
+
+Training Tracking
+
+Log sessions (training/run/workout)
+
+Store detailed metrics
+
+Store notes
+
+Track intensity
+
+Track duration
+
+Support arbitrary extra data
+
+Body Tracking
+
+Weight history
+
+Body fat history
+
+Optional notes
+
+Analytics
+
+Weekly summary
+
+Monthly progress
+
+Yearly progress
+
+Trend graphs
+
+Consistency tracking
+
+Calendar View
+
+Monthly layout
+
+Entries per day
+
+Click to view details
+
+UI
+
+Dark mode only
+
+Mobile-first
+
+Dashboard overview
+
+Minimal typing required
+
+2. NON-FUNCTIONAL REQUIREMENTS
+
+Performance target:
+
+Page load < 1 second on LAN/VPS
+
+Minimal JavaScript
+
+Server-rendered pages
+
+Efficient SQL queries
+
+Security level:
+
+Basic production safety
+
+HTTPS required
+
+Prepared statements only
+
+Password hashing
+
+CSRF protection recommended
+
+Reliability:
+
+Manual backups acceptable
+
+System must tolerate unexpected shutdowns
+
+Scalability:
+
+Designed for 1–10 users
+
+Can scale to ~100 without redesign
+
+3. SYSTEM ARCHITECTURE
+
+CLIENT → WEB SERVER → PHP APP → DATABASE
+
+User Browser
+↓ HTTPS
+Web Server (Apache/Nginx)
+↓
+PHP Runtime
+↓
+Application Code
+↓
+MariaDB Database
+
+No microservices
+No external APIs
+No background workers required
+
+4. SERVER REQUIREMENTS
+
+Minimum:
+
+Linux server (recommended)
+
+1 CPU core
+
+1 GB RAM
+
+10 GB storage
+
+Software:
+
+PHP 8.1+
+
+MariaDB 10.5+
+
+Apache 2.4+ or Nginx
+
+OpenSSL
+
+Certbot (for SSL)
+
+Recommended PHP extensions:
+
+pdo_mysql
+
+mbstring
+
+json
+
+openssl
+
+session
+
+5. DIRECTORY STRUCTURE (DETAILED)
+
+fitness-tracker/
+│
+├── public/ ← Web root ONLY
+│ ├── index.php
+│ ├── dashboard.php
+│ ├── login.php
+│ ├── register.php
+│ ├── logout.php
+│ ├── log-session.php
+│ ├── log-weight.php
+│ ├── calendar.php
+│ ├── progress.php
+│ │
+│ ├── assets/
+│ │ ├── css/
+│ │ │ └── style.css
+│ │ ├── js/
+│ │ │ └── app.js
+│ │ └── images/
+│
+├── app/
+│ ├── controllers/
+│ ├── models/
+│ ├── services/
+│ ├── middleware/
+│ └── utils/
+│
+├── config/
+│ ├── database.php
+│ └── config.php
+│
+├── database/
+│ └── schema.sql
+│
+├── logs/
+├── backups/
+└── README.txt
+
+IMPORTANT:
+Only /public should be accessible from the web.
+
+6. DATABASE DESIGN (FULL)
+USERS TABLE
+
+Purpose: authentication + ownership
+
+Fields:
+
+id — primary key
+
+name — display + login identifier
+
+email — optional future use
+
+password_hash — bcrypt
+
+created_at — audit trail
+
+SQL:
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(150),
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+BODY_METRICS TABLE
+
+Stores longitudinal physical data.
+
+Supports trend analysis.
+
+CREATE TABLE body_metrics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    date DATE NOT NULL,
+    weight_kg DECIMAL(5,2),
+    body_fat_percent DECIMAL(5,2),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX (user_id, date),
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+SESSIONS TABLE
+
+Represents one training activity.
+
+Session types are user-defined (stored in session_types table).
+Default types: training, run, workout, swimming, cycling, hiking, stretching
+
+SESSION_TYPES TABLE
+
+Allows users to define custom session types.
+
+CREATE TABLE session_types (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    name VARCHAR(50) NOT NULL,
+    icon VARCHAR(50),
+    is_default BOOLEAN DEFAULT FALSE,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+NOTE: user_id = NULL for system defaults.
+
+CREATE TABLE sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    date DATE NOT NULL,
+    start_time TIME,
+    duration_minutes INT,
+    session_type VARCHAR(50) NOT NULL,
+    intensity TINYINT,
+    location VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX (user_id, date),
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+SESSION_DETAILS TABLE (KEY DESIGN FEATURE)
+
+Flexible schema for unlimited metrics.
+
+Examples:
+
+rounds = 6
+distance_km = 5.2
+pace = 5:15/km
+exercise = squat
+sets = 5
+reps = 5
+
+CREATE TABLE session_details (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_id INT NOT NULL,
+    detail_key VARCHAR(100),
+    detail_value VARCHAR(255),
+
+    INDEX (session_id),
+
+    FOREIGN KEY (session_id)
+        REFERENCES sessions(id)
+        ON DELETE CASCADE
+);
+
+This prevents schema redesign later.
+
+WORKOUTS TABLE
+
+Reusable templates.
+
+CREATE TABLE workouts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+WORKOUT_ENTRIES TABLE
+
+Links workouts to sessions.
+
+CREATE TABLE workout_entries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    workout_id INT NOT NULL,
+    session_id INT NOT NULL,
+
+    FOREIGN KEY (workout_id)
+        REFERENCES workouts(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (session_id)
+        REFERENCES sessions(id)
+        ON DELETE CASCADE
+);
+7. AUTHENTICATION DESIGN
+
+Password storage:
+
+Use PHP password_hash()
+
+Default algorithm (bcrypt)
+
+Never store plaintext passwords
+
+Session management:
+
+PHP sessions
+
+Store user_id only
+
+Regenerate session ID on login
+
+Logout:
+
+session_destroy()
+
+Delete session cookie
+
+Password Reset:
+
+User requests reset via username
+
+Generate secure random token
+
+Store token hash + expiry (1 hour) in password_resets table
+
+Display token once (or email if configured)
+
+User enters token + new password
+
+Validate token, update password_hash
+
+Delete used token
+
+SQL:
+
+CREATE TABLE password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+8. DATA FLOW — LOG SESSION
+
+User submits form
+
+Server validates input
+
+Insert into sessions table
+
+Insert extra metrics into session_details
+
+Redirect to dashboard
+
+9. DASHBOARD CONTENT
+
+Recommended widgets:
+
+Current Week
+
+Sessions count
+
+Total training time
+
+Runs distance
+
+Average intensity
+
+Body Status
+
+Latest weight
+
+Latest body fat
+
+Change from last week
+
+Recent Activity
+
+Last 5 sessions
+
+Quick Actions
+
+Log session
+
+Log weight
+
+View calendar
+
+10. CALENDAR VIEW DESIGN
+
+Monthly grid:
+
+Sun Mon Tue Wed Thu Fri Sat
+
+Each day shows:
+
+Session icons
+
+Weight entries
+
+Click → popup/details page
+
+Implementation options:
+
+Server-rendered table
+
+Minimal JS enhancement
+
+11. PROGRESS ANALYTICS
+
+Queries should compute:
+
+Weight trend:
+
+SELECT date, weight_kg
+FROM body_metrics
+WHERE user_id = ?
+ORDER BY date;
+
+Monthly training volume:
+
+SELECT
+DATE_FORMAT(date, '%Y-%m') AS month,
+SUM(duration_minutes)
+FROM sessions
+WHERE user_id = ?
+GROUP BY month;
+
+12. DARK MODE UI GUIDELINES
+
+Background: #0f1115
+Card: #1a1d24
+Border: #2a2f3a
+Text: #e4e7eb
+
+Design principles:
+
+High contrast
+
+Large touch targets
+
+Minimal clutter
+
+Readable charts
+
+13. PERFORMANCE OPTIMIZATION
+
+Use indexes on:
+
+user_id
+
+date fields
+
+foreign keys
+
+Avoid:
+
+SELECT *
+
+N+1 queries
+
+Excessive JavaScript
+
+14. SECURITY CHECKLIST
+
+Required:
+
+HTTPS only
+
+Prepared SQL statements
+
+Password hashing
+
+Input validation
+
+Escape output (XSS prevention)
+
+Recommended:
+
+CSRF tokens for forms
+
+Login rate limiting
+
+Secure session cookies
+
+INPUT VALIDATION RULES:
+
+Username:
+  - Length: 3-50 characters
+  - Allowed: letters, numbers, underscore, hyphen
+  - Pattern: ^[a-zA-Z0-9_-]{3,50}$
+
+Password:
+  - Minimum: 8 characters
+  - Maximum: 128 characters
+  - Must contain: 1 letter + 1 number
+
+Email (optional):
+  - Standard email format
+  - Maximum: 150 characters
+
+Session type:
+  - Maximum: 50 characters
+  - Allowed: letters, numbers, spaces, hyphens
+
+Notes/Text fields:
+  - Maximum: 10,000 characters
+  - Sanitize HTML on output
+
+Numeric fields:
+  - weight_kg: 0.01 - 999.99
+  - body_fat_percent: 0.01 - 99.99
+  - duration_minutes: 1 - 1440
+  - intensity: 1 - 10
+
+Dates:
+  - Format: YYYY-MM-DD
+  - Cannot be in future (for logs)
+
+15. ERROR LOGGING STRATEGY
+
+Log Levels:
+
+  ERROR — Database failures, auth failures, exceptions
+  WARNING — Validation failures, rate limits hit
+  INFO — Logins, logouts, data changes (audit trail)
+  DEBUG — Development only, SQL queries, timings
+
+Log Format:
+
+  [TIMESTAMP] [LEVEL] [USER_ID] [IP] MESSAGE
+
+Example:
+
+  [2026-02-20 14:30:00] [ERROR] [12] [192.168.1.5] Database connection failed
+
+Log Files:
+
+  logs/error.log — ERROR + WARNING
+  logs/access.log — INFO (audit trail)
+  logs/debug.log — DEBUG (dev only, gitignored)
+
+Log Rotation:
+
+  Rotate weekly or at 10MB
+  Keep 4 weeks of logs
+  Compress old logs
+
+Implementation:
+
+  Create Logger class in app/utils/Logger.php
+  Set error_reporting and display_errors in config
+  Production: display_errors = Off
+  Log PHP errors to logs/php_errors.log
+
+Sensitive Data:
+
+  NEVER log passwords
+  NEVER log full session tokens
+  Mask email addresses in logs
+
+16. BACKUP PROCEDURE
+
+Manual weekly backup:
+
+mysqldump fitness_tracker > backup.sql
+
+Test restore occasionally:
+
+mysql fitness_tracker < backup.sql
+
+Keep copies:
+
+Local
+
+External drive
+
+Off-site if possible
+
+17. BUILD ORDER (DETAILED)
+
+PHASE 1 — FOUNDATION
+
+Server setup
+
+Database creation
+
+User authentication
+
+Session handling
+
+PHASE 2 — CORE TRACKING
+
+Session logging
+
+Body metrics logging
+
+Data validation
+
+PHASE 3 — INTERFACE
+
+Dashboard
+
+Calendar
+
+Progress page
+
+PHASE 4 — POLISH
+
+UI refinement
+
+Performance tuning
+
+Security hardening
+
+18. FUTURE EXTENSIONS (OPTIONAL)
+
+System is ready for:
+
+Nutrition tracking
+
+Sleep tracking
+
+Recovery metrics
+
+Coach dashboards
+
+Team features
+
+API access
+
+Mobile app wrapper
+
+Wearable integrations
+
+Advanced analytics
+
+END OF DOCUMENT
